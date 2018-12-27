@@ -22,6 +22,12 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
+#############
+## Testing ##
+#############
+
+## Locate GTest
+find_package(GTest REQUIRED)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -128,8 +134,11 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(include
-  ${catkin_INCLUDE_DIRS}
+include_directories(
+  include
+    ${catkin_INCLUDE_DIRS}
+    ###### TESTING ######
+    ${GTEST_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -221,10 +230,21 @@ install(DIRECTORY include/segmenter/
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_localization.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_control.cpp)
+
+catkin_add_gtest(odometry_test test/odometry_test.cpp)
+
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
 
+# if(TARGET ${PROJECT_NAME}-test)
+#   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
+# endif()
+
+
+
+############## TESTING ##################
+target_link_libraries(odometry_test ${catkin_LIBRARIES})
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)

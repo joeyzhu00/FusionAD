@@ -55,6 +55,12 @@ class WheelOdometryNode
         ~WheelOdometryNode();
         void initRosComm();
         
+        // declare support functions
+        // calculates the current velocity state of the vehicle
+        void odometry_state_estimation();
+        // does the median filter calculation for the wheel odometry
+        void wheel_odom_median_filter();
+
     private:
         // initialize the nodehandle
         ros::NodeHandle odometrynode_nh;
@@ -114,12 +120,6 @@ class WheelOdometryNode
 
         // initializing a deque for a running median
         std::deque<float> vel_deque;
-        
-        // declare support functions
-        // calculates the current velocity state of the vehicle
-        void odometry_state_estimation();
-        // does the median filter calculation for the wheel odometry
-        void wheel_odom_median_filter();
 
         // declare the callbacks
         void leftEncoderCallback(const std_msgs::Int32& left_encoder_msg);
