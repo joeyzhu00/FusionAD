@@ -35,7 +35,7 @@ Reason     : Check whether median filter has correct output
 // TEST CASE 1: Testing the odometry_state_estimation logic //
 // Checking for 0 movement input to the odometry logic      //
 //////////////////////////////////////////////////////////////
-
+    
 TEST(odometry_state_test_1, ShouldPass)
 {
     fusionad::localization::wheel_odometry_node::WheelOdometryNode odom_state_1;
@@ -57,10 +57,10 @@ TEST(odometry_state_test_1, ShouldPass)
 // Checking for 0 velocity input to the median filter      ///
 //////////////////////////////////////////////////////////////
 
-TEST(median_filter_test, ShouldPass)
+TEST(median_filter_test_1, ShouldPass)
 {
     fusionad::localization::wheel_odometry_node::WheelOdometryNode median_filter_1;
-    
+
     float vel_magnitude = 0;
 
     for(int j = 0; j < 10; j++)
@@ -77,5 +77,7 @@ TEST(median_filter_test, ShouldPass)
 int main(int argc, char **argv)
 {
     testing::InitGoogleTest(&argc, argv);
+    ros::init(argc, argv, "OdometryTest");
+    ros::NodeHandle odometry_test_nh;
     return RUN_ALL_TESTS();
 }

@@ -234,9 +234,10 @@ install(DIRECTORY include/segmenter/
 
 catkin_add_gtest(odometry_test test/odometry_test.cpp)
 
-# if(TARGET ${PROJECT_NAME}-test)
-#   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
-# endif()
+if(TARGET odometry_test)
+  target_link_libraries(odometry_test ${catkin_LIBRARIES})
+  target_link_libraries(odometry ${catkin_LIBRARIES})
+endif()
 
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
@@ -245,6 +246,6 @@ catkin_add_gtest(odometry_test test/odometry_test.cpp)
 
 
 ############## TESTING ##################
-target_link_libraries(odometry_test ${catkin_LIBRARIES})
+#target_link_libraries(odometry_test ${catkin_LIBRARIES})
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
