@@ -123,16 +123,8 @@ namespace frame_calibration_node
         // }
     }
 
-    void FrameCalibrationNode::geodesyCallback(const nav_msgs::Odometry& geodesy_msg)
+    void FrameCalibrationNode::covarianceRescaling(const nav_msgs::Odometry& geodesy_msg)
     {
-        /*
-        NOTE: The covariance in the eth-zurich swift package provides a filtered gps signal and a non-filtered gps signal.
-        A covariance of 1 [m^2] is typically done with their "single point estimation" and a covariance of 0.0049 and 
-        25 [m^2] has been filtered. Because the 1 [m^2] covariance is typically noisy due to the lack of filtering and the 
-        25 [m^2] covariance is filtered and smooth, the two covariances are swapped. This allows the EKF to take in the 
-        previously 25 [m^2] measurements and apply a larger Kalman Gain (trusting this measurement more). 
-        */
-
         if (geodesy_msg.pose.covariance[0] == 1)
         {
             geodesy_tf_msg.pose.covariance[0] = 25;
@@ -151,7 +143,96 @@ namespace frame_calibration_node
             geodesy_tf_msg.pose.covariance[7] = geodesy_msg.pose.covariance[7];
             geodesy_tf_msg.pose.covariance[35] = 0.005;
         }
+    }
+
+    float FrameCalibrationNode::headingCalibration(float gps_heading)
+    {
+        // if the speed threshold has been met, start the calibration process
+        if(speed_threshold_met)
+        {
+            // apply calibration while vehicle is moving 
+            bool calibration_mode;
+            frameCalibrationNode_nh.getParam("/frame_calibration/calibration_mode", calibration_mode);
+            if(calibration_mode && calibration_in_progress)
+            {
+                gps_heading_accumulation += gps_heading;
+                heading_sample_counter++;
+                ROS_INFO("Calibrating Heading, Keep Driving Straight!");
+
+                if(heading_sample_counter == MSG_THRESHOLD)
+                {
+                    float calibrated_heading;
+                    calibrated_heading = gps_heading_accumulation / heading_sample_counter;
+
+                    ROS_INFO("Calibrated Heading: %f", calibrated_heading);
+                    calibration_in_progress = false;
+                }
+            }
+        }
+        else
+        {
+            float heading_from_calibration;
+
+            frameCalibrationNode_nh.getParam("/frame_calibration/heading_from_calibration", heading_from_calibration);
+            gps_heading = heading_from_calibration;
+        }
+
+        return gps_heading;
+    }
+
+    void FrameCalibrationNode::backwardDiffHeading(const nav_msgs::Odometry& geodesy_msg)
+    {
+        float distance_comparison;
+        float gps_threshold;
+        float vehicle_heading_from_gps;
+
+        frameCalibrationNode_nh.getParam("/frame_calibration/gps_threshold", gps_threshold);
+        // calculate the euclidian distance between point (n) and point (n-1)
+        distance_comparison = std::sqrt(std::pow(geodesy_tf_msg.pose.pose.position.x - previous_geodesy_tf_msg.pose.pose.position.x, 2) + std::pow(geodesy_tf_msg.pose.pose.position.y - previous_geodesy_tf_msg.pose.pose.position.y, 2));                    
         
+        // calculating vehicle heading from gps point n and gps point n-1
+        vehicle_heading_from_gps = std::atan2((geodesy_msg.pose.pose.position.y - previous_geodesy_point.y), (geodesy_msg.pose.pose.position.x - previous_geodesy_point.x));
+
+        vehicle_heading_from_gps = headingCalibration(vehicle_heading_from_gps);
+
+        // apply heading rejection
+        float heading_threshold;
+        frameCalibrationNode_nh.getParam("/frame_calibration/heading_threshold", heading_threshold);
+        if(std::abs(std::abs(previous_vehicle_heading) - std::abs(vehicle_heading_from_gps)) >= heading_threshold)                            
+        {
+            vehicle_heading_from_gps = previous_vehicle_heading;
+            ROS_INFO("Rejected Heading Estimate");
+        }
+
+        // pack the new vehicle heading into a temporary quaternion message
+        tf::Quaternion vehicle_heading_quaternion = tf::createQuaternionFromRPY(0, 0, vehicle_heading_from_gps);
+
+        // place the temporary quaternion message into the geodesy_tf_msg 
+        geodesy_tf_msg.pose.pose.orientation.x = vehicle_heading_quaternion[0];
+        geodesy_tf_msg.pose.pose.orientation.y = vehicle_heading_quaternion[1];
+        geodesy_tf_msg.pose.pose.orientation.z = vehicle_heading_quaternion[2];
+        geodesy_tf_msg.pose.pose.orientation.w = vehicle_heading_quaternion[3];
+
+        // if the distance between point (n) and point (n-1) is less than the threshold, then publish the gps msg
+        if(std::abs(distance_comparison) <= gps_threshold)
+        {
+            geodesy_tf_pub.publish(geodesy_tf_msg);
+        }
+
+        previous_vehicle_heading = vehicle_heading_from_gps;
+    }
+
+    void FrameCalibrationNode::geodesyCallback(const nav_msgs::Odometry& geodesy_msg)
+    {
+        /*
+        NOTE: The covariance in the eth-zurich swift package provides a filtered gps signal and a non-filtered gps signal.
+        A covariance of 1 [m^2] is typically done with their "single point estimation" and a covariance of 0.0049 and 
+        25 [m^2] has been filtered. Because the 1 [m^2] covariance is typically noisy due to the lack of filtering and the 
+        25 [m^2] covariance is filtered and smooth, the two covariances are swapped. This allows the EKF to take in the 
+        previously 25 [m^2] measurements and apply a larger Kalman Gain (trusting this measurement more). 
+        */
+        
+        covarianceRescaling(geodesy_msg);
         // creating a temporary geometry PoseStamped message to facilitate homogeneous transform
         geometry_msgs::PointStamped temp_geodesy_tf_point;
         temp_geodesy_tf_point.header.frame_id = "gps";
@@ -186,73 +267,8 @@ namespace frame_calibration_node
                 }
                 else
                 {
-                    float distance_comparison;
-                    float gps_threshold;
-                    float vehicle_heading_from_gps;
-
-                    frameCalibrationNode_nh.getParam("/frame_calibration/gps_threshold", gps_threshold);
-                    // calculate the euclidian distance between point (n) and point (n-1)
-                    distance_comparison = std::sqrt(std::pow(geodesy_tf_msg.pose.pose.position.x - previous_geodesy_tf_msg.pose.pose.position.x, 2) + std::pow(geodesy_tf_msg.pose.pose.position.y - previous_geodesy_tf_msg.pose.pose.position.y, 2));                    
-                    
-                    // calculating vehicle heading from gps point n and gps point n-1
-                    vehicle_heading_from_gps = std::atan2((geodesy_msg.pose.pose.position.y - previous_geodesy_point.y), (geodesy_msg.pose.pose.position.x - previous_geodesy_point.x));
-
-                    // apply heading rejection
-                    float heading_threshold;
-                    frameCalibrationNode_nh.getParam("/frame_calibration/heading_threshold", heading_threshold);
-                    if(std::abs(std::abs(previous_vehicle_heading) - std::abs(vehicle_heading_from_gps)) >= heading_threshold)                            
-                    {
-                        vehicle_heading_from_gps = previous_vehicle_heading;
-                        ROS_INFO("Rejected Heading Estimate");
-                    }
-                    
-                    // if the speed threshold has been met, start the calibration process
-                    if(speed_threshold_met)
-                    {
-                        // apply calibration while vehicle is moving 
-                        bool calibration_mode;
-                        frameCalibrationNode_nh.getParam("/frame_calibration/calibration_mode", calibration_mode);
-                        if(calibration_mode && calibration_in_progress)
-                        {
-                            gps_heading_accumulation += vehicle_heading_from_gps;
-                            heading_sample_counter++;
-                            ROS_INFO("Calibrating Heading, Keep Driving Straight!");
-
-                            if(heading_sample_counter == MSG_THRESHOLD)
-                            {
-                                float calibrated_heading;
-                                calibrated_heading = gps_heading_accumulation / heading_sample_counter;
-
-                                ROS_INFO("Calibrated Heading: %f", calibrated_heading);
-                                calibration_in_progress = false;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        float heading_from_calibration;
-
-                        frameCalibrationNode_nh.getParam("/frame_calibration/heading_from_calibration", heading_from_calibration);
-                        vehicle_heading_from_gps = heading_from_calibration;
-                    }
-                    
-
-                    // pack the new vehicle heading into a temporary quaternion message
-                    tf::Quaternion vehicle_heading_quaternion = tf::createQuaternionFromRPY(0, 0, vehicle_heading_from_gps);
-
-                    // place the temporary quaternion message into the geodesy_tf_msg 
-                    geodesy_tf_msg.pose.pose.orientation.x = vehicle_heading_quaternion[0];
-                    geodesy_tf_msg.pose.pose.orientation.y = vehicle_heading_quaternion[1];
-                    geodesy_tf_msg.pose.pose.orientation.z = vehicle_heading_quaternion[2];
-                    geodesy_tf_msg.pose.pose.orientation.w = vehicle_heading_quaternion[3];
-
-                    // if the distance between point (n) and point (n-1) is less than the threshold, then publish the gps msg
-                    if(std::abs(distance_comparison) <= gps_threshold)
-                    {
-                        geodesy_tf_pub.publish(geodesy_tf_msg);
-                    }
-
-                    previous_vehicle_heading = vehicle_heading_from_gps;
+                    // calculate the vehicle heading with backward differencing
+                    backwardDiffHeading(geodesy_msg);
                 }
 
                 // ROS_INFO("gps: (%.2f, %.2f) -----> odom: (%.2f, %.2f) at time %.2f",
@@ -271,49 +287,52 @@ namespace frame_calibration_node
             {
                 ROS_ERROR("Received an exception when trying to transform a point from \"gps\" to \"odom\": %s",
                 geodesy_exception.what());
-            }
-
-            // // perform while geodesy is not calibrated
-            // if(!geodesy_is_calibrated)
-            // {
-            //     ROS_INFO_ONCE("Collecting Geodesy Samples");
-
-            //     // collect x sample and add to previous samples
-            //     geodesy_x_accumulation += geodesy_tf_msg.pose.pose.position.x;
-
-            //     // collect y sample and add to previous samples
-            //     geodesy_y_accumulation += geodesy_tf_msg.pose.pose.position.y;
-
-            //     // increment geodesy samples counter
-            //     geodesy_samples_counter++;
-
-            //     // calculate average of samples once threshold is hit
-            //     if(geodesy_samples_counter >= MSG_THRESHOLD)
-            //     {    
-            //         // initialize a Pose message to store averaged data
-            //         geometry_msgs::Pose pose_calibrated;
-
-            //         // take average of x and y position samples
-            //         pose_calibrated.position.x = geodesy_x_accumulation / geodesy_samples_counter;
-            //         pose_calibrated.position.y = geodesy_y_accumulation / geodesy_samples_counter;
-
-            //         pose_calibrated.orientation.x = rot_msg.orientation.x;
-            //         pose_calibrated.orientation.y = rot_msg.orientation.y;
-            //         pose_calibrated.orientation.z = rot_msg.orientation.z;
-            //         pose_calibrated.orientation.w = rot_msg.orientation.w;
-
-            //         // publish averaged samples
-            //         calibrated_pose_pub.publish(pose_calibrated);
-                    
-            //         // calibration is complete
-            //         geodesy_calibrated_x_value = pose_calibrated.position.x;
-            //         geodesy_calibrated_y_value = pose_calibrated.position.y;
-            //         ROS_INFO("Geodesy Position Calibration Completed");
-            //         geodesy_is_calibrated = true;
-            //     }
-            // }  
+            }  
         }      
     }
+
+    // void FrameCalibrationNode::gpsPoseCalibration()
+    // {
+    //     // perform while geodesy is not calibrated
+    //     if(!geodesy_is_calibrated)
+    //     {
+    //         ROS_INFO_ONCE("Collecting Geodesy Samples");
+
+    //         // collect x sample and add to previous samples
+    //         geodesy_x_accumulation += geodesy_tf_msg.pose.pose.position.x;
+
+    //         // collect y sample and add to previous samples
+    //         geodesy_y_accumulation += geodesy_tf_msg.pose.pose.position.y;
+
+    //         // increment geodesy samples counter
+    //         geodesy_samples_counter++;
+
+    //         // calculate average of samples once threshold is hit
+    //         if(geodesy_samples_counter >= MSG_THRESHOLD)
+    //         {    
+    //             // initialize a Pose message to store averaged data
+    //             geometry_msgs::Pose pose_calibrated;
+
+    //             // take average of x and y position samples
+    //             pose_calibrated.position.x = geodesy_x_accumulation / geodesy_samples_counter;
+    //             pose_calibrated.position.y = geodesy_y_accumulation / geodesy_samples_counter;
+
+    //             pose_calibrated.orientation.x = rot_msg.orientation.x;
+    //             pose_calibrated.orientation.y = rot_msg.orientation.y;
+    //             pose_calibrated.orientation.z = rot_msg.orientation.z;
+    //             pose_calibrated.orientation.w = rot_msg.orientation.w;
+
+    //             // publish averaged samples
+    //             calibrated_pose_pub.publish(pose_calibrated);
+                
+    //             // calibration is complete
+    //             geodesy_calibrated_x_value = pose_calibrated.position.x;
+    //             geodesy_calibrated_y_value = pose_calibrated.position.y;
+    //             ROS_INFO("Geodesy Position Calibration Completed");
+    //             geodesy_is_calibrated = true;
+    //         }
+    //     }
+    // }
 
     // void FrameCalibrationNode::lidarCallback(const nav_msgs::Odometry& lidar_msg)
     // {
