@@ -193,8 +193,6 @@ namespace frame_calibration_node
         // calculating vehicle heading from gps point n and gps point n-1
         vehicle_heading_from_gps = std::atan2((geodesy_msg.pose.pose.position.y - previous_geodesy_point.y), (geodesy_msg.pose.pose.position.x - previous_geodesy_point.x));
 
-        vehicle_heading_from_gps = headingCalibration(vehicle_heading_from_gps);
-
         // apply heading rejection
         float heading_threshold;
         frameCalibrationNode_nh.getParam("/frame_calibration/heading_threshold", heading_threshold);
@@ -204,6 +202,8 @@ namespace frame_calibration_node
             ROS_INFO("Rejected Heading Estimate");
         }
 
+        vehicle_heading_from_gps = headingCalibration(vehicle_heading_from_gps);
+        
         // pack the new vehicle heading into a temporary quaternion message
         tf::Quaternion vehicle_heading_quaternion = tf::createQuaternionFromRPY(0, 0, vehicle_heading_from_gps);
 
