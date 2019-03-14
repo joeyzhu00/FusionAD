@@ -134,6 +134,13 @@ class FrameCalibrationNode
         void yawCallback(const sensor_msgs::Imu& imu_msg);
         void lidarCallback(const nav_msgs::Odometry& lidar_msg);
         void odomCallback(const nav_msgs::Odometry& odom_msg);
+
+        // support functions
+        void covarianceRescaling(const nav_msgs::Odometry& geodesy_msg);
+        float headingCalibration(float gps_heading);
+        void backwardDiffHeading(const nav_msgs::Odometry& geodesy_msg);
+        // position calibration functions
+        void gpsPoseCalibration();
 };
 }// frame_calibration_node
 }// localization
