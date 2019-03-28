@@ -271,9 +271,16 @@ namespace frame_calibration_node
                     backwardDiffHeading(geodesy_msg);
                 }
 
-                // ROS_INFO("gps: (%.2f, %.2f) -----> odom: (%.2f, %.2f) at time %.2f",
-                // temp_geodesy_tf_point.point.x, temp_geodesy_tf_point.point.y,
-                // geodesy_tf_point.point.x, geodesy_tf_point.point.y, geodesy_tf_point.header.stamp.toSec());
+                bool debug_mode; 
+                frameCalibrationNode_nh.getParam("/frame_calibration/debug_mode", debug_mode);
+
+                if(debug_mode)
+                {
+                    ROS_INFO("gps: (%.2f, %.2f) -----> odom: (%.2f, %.2f) at time %.2f",
+                    temp_geodesy_tf_point.point.x, temp_geodesy_tf_point.point.y,
+                    geodesy_tf_point.point.x, geodesy_tf_point.point.y, geodesy_tf_point.header.stamp.toSec());
+                }
+                
                 
                 // store previous messages for distance calculation
                 previous_geodesy_tf_msg.pose.pose.position.x = geodesy_tf_msg.pose.pose.position.x;
