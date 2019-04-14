@@ -34,6 +34,7 @@ Topic:  /localization/wheel_odom
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_listener.h"
 #include "stdio.h"
+#include <interface/Controlcmd.h>
 #include <time.h>
 #include <queue>
 #include <algorithm>
@@ -77,9 +78,6 @@ class WheelOdometryNode
         // black car wheel radius in meters
         const float WHEEL_RADIUS = 0.28675; 
 
-        // time interval
-        const float DT = 0.02;
-
         // angular velocity
         float left_angular_vel = 0;
         float right_angular_vel = 0;
@@ -121,6 +119,7 @@ class WheelOdometryNode
 
         bool first_time_cycle_complete = false;
 
+        bool steering_value_received = false;
         // initializing a deque for a running median
         std::deque<float> vel_deque;
         
@@ -133,7 +132,7 @@ class WheelOdometryNode
         // declare the callbacks
         void leftEncoderCallback(const std_msgs::Int32& left_encoder_msg);
         void rightEncoderCallback(const std_msgs::Int32& right_encoder_msg);
-        void steeringCallback(const std_msgs::Float64& steering_msg);
+        void steeringCallback(const interface::Controlcmd& steering_msg);
         void timerCallback(const ros::TimerEvent& event);
         
 

@@ -15,7 +15,7 @@ Topic:  /localization/right_encoder_reading
 Topic:  /localization/left_encoder_reading
             Msg: std_msgs::Int16
 Topic:  /control/steering_response
-            Msg: std_msgs::Float64
+            Msg: interface::Controlcmd
 
 Publisher:
 -------------------------------------------  
@@ -51,29 +51,27 @@ namespace wheel_odometry_node
         odometrynode_nh.getParam("/frame_calibration/heading_from_calibration", previous_vehicle_heading);
     }
 
-    void WheelOdometryNode::steeringCallback(const std_msgs::Float64& steering_msg)
+    void WheelOdometryNode::steeringCallback(const interface::Controlcmd& steering_msg)
     {
         // steering feedback from the EPAS
-        steering_value = steering_msg.data;
-
+        steering_value = steering_msg.steeringAngle;
         // get the current time
-        steering_call_time = ros::Time::now();
+        steering_call_time = clock();
+        steering_value_received = true;
     }
 
     void WheelOdometryNode::leftEncoderCallback(const std_msgs::Int32& left_encoder_msg)
     {
         // encoder counts are from the Arduinos (Signwise Quadrature Encoder)
         current_left_encoder_msg = left_encoder_msg.data;
-
-        left_encoder_call_time = ros::Time::now();
+        left_encoder_call_time = clock();
     }
 
     void WheelOdometryNode::rightEncoderCallback(const std_msgs::Int32& right_encoder_msg)
     {
         // negative sign to account for the encoder difference
         current_right_encoder_msg = right_encoder_msg.data;
-
-        right_encoder_call_time = ros::Time::now();
+        right_encoder_call_time = clock();
     }
 
     void WheelOdometryNode::wheel_odom_median_filter()
@@ -117,7 +115,15 @@ namespace wheel_odometry_node
         {
             left_encoder_time = left_encoder_call_time - left_prev_encoder_time;
             right_encoder_time = right_encoder_call_time - right_prev_encoder_time;
-            steering_time = steering_call_time - steering_prev_time;
+            
+            if(steering_value_received)
+            {
+                steering_time = steering_call_time - steering_prev_time;
+            }
+            else
+            {
+                steering_time = steering_prev_time;
+            }
         }
 
         // convert encoder values to angular velocities
@@ -152,20 +158,28 @@ namespace wheel_odometry_node
         float wheelbase = 2.3622;
 
         float vehicle_heading;
-        vehicle_heading = previous_vehicle_heading + (vel_magnitude / wheelbase) * steering_value * steering_time;
+        vehicle_heading = previous_vehicle_heading + (vel_magnitude / wheelbase) * steering_value * 0.1;
         
         steering_prev_time = steering_call_time;
         previous_vehicle_heading = vehicle_heading;
 
+        // stuff heading into pose msg
+        double roll = 0, pitch = 0;
+        
+        tf::Quaternion vehicle_quat = tf::createQuaternionFromRPY(0, 0, vehicle_heading);
 
-        // position_estimate.pose.orientation.x
-
+        // place the temporary quaternion message into the geodesy_tf_msg 
+        position_estimate.pose.orientation.x = vehicle_quat[0];
+        position_estimate.pose.orientation.y = vehicle_quat[1];
+        position_estimate.pose.orientation.z = vehicle_quat[2];
+        position_estimate.pose.orientation.w = vehicle_quat[3];
     }
 
     void WheelOdometryNode::timerCallback(const ros::TimerEvent& event)
     {// publishes the wheel odometry message if the calibration was completed
         odometry_state_estimation();
         full_odom_message.twist = velocity_estimate;
+        full_odom_message.pose = position_estimate;
 
         // declaring the header frame of the wheel_odom message
         full_odom_message.header.frame_id = "odom";
