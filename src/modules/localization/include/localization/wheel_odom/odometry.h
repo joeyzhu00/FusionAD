@@ -108,12 +108,18 @@ class WheelOdometryNode
         float steering_value = 0;
 
 
-        // message time and time delta
-        float right_encoder_time_now = 0;
-        float left_encoder_time_now = 0;
-        float steering_time_now = 0;
-        
+        // message time and previous time
+        float right_encoder_call_time = 0;
+        float left_encoder_call_time = 0;
+        float steering_call_time = 0;
+
+        float right_prev_encoder_time = 0;
+        float left_prev_encoder_time = 0;
+        float steering_prev_time= 0; 
+
         bool calibration_completed = false;
+
+        bool first_time_cycle_complete = false;
 
         // initializing a deque for a running median
         std::deque<float> vel_deque;

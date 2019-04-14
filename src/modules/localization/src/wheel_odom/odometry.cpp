@@ -56,20 +56,24 @@ namespace wheel_odometry_node
         // steering feedback from the EPAS
         steering_value = steering_msg.data;
 
-        // calculate the time difference
-
+        // get the current time
+        steering_call_time = ros::Time::now();
     }
 
     void WheelOdometryNode::leftEncoderCallback(const std_msgs::Int32& left_encoder_msg)
     {
         // encoder counts are from the Arduinos (Signwise Quadrature Encoder)
         current_left_encoder_msg = left_encoder_msg.data;
+
+        left_encoder_call_time = ros::Time::now();
     }
 
     void WheelOdometryNode::rightEncoderCallback(const std_msgs::Int32& right_encoder_msg)
     {
         // negative sign to account for the encoder difference
         current_right_encoder_msg = right_encoder_msg.data;
+
+        right_encoder_call_time = ros::Time::now();
     }
 
     void WheelOdometryNode::wheel_odom_median_filter()
@@ -102,12 +106,27 @@ namespace wheel_odometry_node
     }
 
     void WheelOdometryNode::odometry_state_estimation()
-    {
+    {   
+        // nonzero to prevent divide by zero error
+        float left_encoder_time = 0.02;
+        float right_encoder_time = 0.02;
+        float steering_time = 0;
+        
+        // if the first cycle has been completed, can start calculating time difference
+        if(first_time_cycle_complete)
+        {
+            left_encoder_time = left_encoder_call_time - left_prev_encoder_time;
+            right_encoder_time = right_encoder_call_time - right_prev_encoder_time;
+            steering_time = steering_call_time - steering_prev_time;
+        }
+
         // convert encoder values to angular velocities
-        left_angular_vel = ((2*M_PI*(current_left_encoder_msg-previous_left_encoder_msg))/(pulses_per_rotation*DT));
+        left_angular_vel = ((2*M_PI*(current_left_encoder_msg-previous_left_encoder_msg))/(pulses_per_rotation*left_encoder_time));
+        left_prev_encoder_time = left_encoder_call_time;
         previous_left_encoder_msg = current_left_encoder_msg;
 
-        right_angular_vel = ((2*M_PI*((-1)*current_right_encoder_msg-previous_right_encoder_msg))/(pulses_per_rotation*DT));
+        right_angular_vel = ((2*M_PI*((-1)*current_right_encoder_msg-previous_right_encoder_msg))/(pulses_per_rotation*right_encoder_time));
+        right_prev_encoder_time = right_encoder_call_time;
         previous_right_encoder_msg = (-1)*current_right_encoder_msg;
 
         // velocity magnitude estimate
@@ -133,11 +152,14 @@ namespace wheel_odometry_node
         float wheelbase = 2.3622;
 
         float vehicle_heading;
-        vehicle_heading = previous_vehicle_heading + (vel_magnitude / wheelbase) * steering_value * 0.1;
+        vehicle_heading = previous_vehicle_heading + (vel_magnitude / wheelbase) * steering_value * steering_time;
         
+        steering_prev_time = steering_call_time;
         previous_vehicle_heading = vehicle_heading;
 
+
         // position_estimate.pose.orientation.x
+
     }
 
     void WheelOdometryNode::timerCallback(const ros::TimerEvent& event)
