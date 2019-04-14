@@ -1,6 +1,4 @@
 <launch>
-    <!-- Get the velocity estimate for high level control -->
-    <include file="$(find localization)/launch/wheel_odom.launch" />
 
     <node type="frame_calibration" pkg="localization" name="frame_calibration" output="screen">
         <param name="threshold_pose_std_dev" value="5" />
@@ -10,6 +8,9 @@
         <param name="heading_from_calibration" value="-1.091741" />
         <param name="calibration_mode" value="false" />
     </node>
+
+    <!-- Get the velocity estimate for high level control -->
+    <include file="$(find localization)/launch/wheel_odom.launch" />
     
     <node type="master_tf" pkg="master_transforms" name="master_tf" output="screen">
     </node>

@@ -34,6 +34,7 @@ Topic:  /localization/wheel_odom
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_listener.h"
 #include "stdio.h"
+#include <time.h>
 #include <queue>
 #include <algorithm>
 
@@ -62,7 +63,8 @@ class WheelOdometryNode
         // initialize subscriber
         ros::Subscriber left_encoder_sub;
         ros::Subscriber right_encoder_sub;
-                
+        ros::Subscriber steering_sub;
+
         // Kalman Filter Preparation
         // Odometry messages
         nav_msgs::Odometry full_odom_message;
@@ -77,17 +79,24 @@ class WheelOdometryNode
 
         // time interval
         const float DT = 0.02;
-        // left angular velocity
+
+        // angular velocity
         float left_angular_vel = 0;
-        // right angular velocity
         float right_angular_vel = 0;
 
-        // previous odometry values
+        // current encoder values
+        long current_right_encoder_msg = 0;
+        long current_left_encoder_msg = 0;
+
+        // previous encoder values
         long previous_right_encoder_msg = 0;
         long previous_left_encoder_msg = 0;
 
         // pulses per rotation
         const long pulses_per_rotation = 1200;
+        
+        // previous vehicle heading
+        float previous_vehicle_heading = 0;
         
         // odometry_state_estimation() variables for dead-reckoning
         float vel_magnitude = 0;
@@ -96,6 +105,14 @@ class WheelOdometryNode
         long left_odometry_msg = 0;
         long right_odometry_msg = 0;
 
+        float steering_value = 0;
+
+
+        // message time and time delta
+        float right_encoder_time_now = 0;
+        float left_encoder_time_now = 0;
+        float steering_time_now = 0;
+        
         bool calibration_completed = false;
 
         // initializing a deque for a running median
@@ -110,6 +127,7 @@ class WheelOdometryNode
         // declare the callbacks
         void leftEncoderCallback(const std_msgs::Int32& left_encoder_msg);
         void rightEncoderCallback(const std_msgs::Int32& right_encoder_msg);
+        void steeringCallback(const std_msgs::Float64& steering_msg);
         void timerCallback(const ros::TimerEvent& event);
         
 

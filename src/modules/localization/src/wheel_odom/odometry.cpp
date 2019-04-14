@@ -1,7 +1,8 @@
 #include "localization/wheel_odom/odometry.h"
 
 /*
-Takes wheel odometry from Arduino encoders and translates to vehicle velocity in the base_link frame
+Takes wheel odometry from Arduino encoders and translates to vehicle velocity in the base_link frame.
+Uses heading estimates with bicycle kinematics by using wheelbase, steering angle, and vehicle velocity
 
 NOTE: This script is to handle the raw wheel odometry values from the Signwise 600 P/R rotary encoder and 
       calculate velocity in the base_link frame
@@ -13,6 +14,8 @@ Topic:  /localization/right_encoder_reading
             Msg: std_msgs::Int16
 Topic:  /localization/left_encoder_reading
             Msg: std_msgs::Int16
+Topic:  /control/steering_response
+            Msg: std_msgs::Float64
 
 Publisher:
 -------------------------------------------  
@@ -43,20 +46,30 @@ namespace wheel_odometry_node
         // subscribers for odometry
         left_encoder_sub = odometrynode_nh.subscribe("/localization/left_encoder_reading", 50, &WheelOdometryNode::leftEncoderCallback, this);
         right_encoder_sub = odometrynode_nh.subscribe("/localization/right_encoder_reading", 50, &WheelOdometryNode::rightEncoderCallback, this);
+        steering_sub = odometrynode_nh.subscribe("/control/steering_response", 10, &WheelOdometryNode::steeringCallback, this);
+
+        odometrynode_nh.getParam("/frame_calibration/heading_from_calibration", previous_vehicle_heading);
+    }
+
+    void WheelOdometryNode::steeringCallback(const std_msgs::Float64& steering_msg)
+    {
+        // steering feedback from the EPAS
+        steering_value = steering_msg.data;
+
+        // calculate the time difference
+
     }
 
     void WheelOdometryNode::leftEncoderCallback(const std_msgs::Int32& left_encoder_msg)
     {
         // encoder counts are from the Arduinos (Signwise Quadrature Encoder)
-        left_angular_vel = ((2*M_PI*(left_encoder_msg.data-previous_left_encoder_msg))/(pulses_per_rotation*DT));
-        previous_left_encoder_msg = left_encoder_msg.data;
+        current_left_encoder_msg = left_encoder_msg.data;
     }
 
     void WheelOdometryNode::rightEncoderCallback(const std_msgs::Int32& right_encoder_msg)
     {
         // negative sign to account for the encoder difference
-        right_angular_vel = ((2*M_PI*((-1)*right_encoder_msg.data-previous_right_encoder_msg))/(pulses_per_rotation*DT));
-        previous_right_encoder_msg = (-1)*right_encoder_msg.data;
+        current_right_encoder_msg = right_encoder_msg.data;
     }
 
     void WheelOdometryNode::wheel_odom_median_filter()
@@ -89,7 +102,14 @@ namespace wheel_odometry_node
     }
 
     void WheelOdometryNode::odometry_state_estimation()
-    {        
+    {
+        // convert encoder values to angular velocities
+        left_angular_vel = ((2*M_PI*(current_left_encoder_msg-previous_left_encoder_msg))/(pulses_per_rotation*DT));
+        previous_left_encoder_msg = current_left_encoder_msg;
+
+        right_angular_vel = ((2*M_PI*((-1)*current_right_encoder_msg-previous_right_encoder_msg))/(pulses_per_rotation*DT));
+        previous_right_encoder_msg = (-1)*current_right_encoder_msg;
+
         // velocity magnitude estimate
         vel_magnitude = (left_angular_vel+right_angular_vel)*WHEEL_RADIUS/2; // [m/s]
         // calculating median of the velocities
@@ -100,12 +120,24 @@ namespace wheel_odometry_node
         ///////////////////////
         
         velocity_estimate.twist.linear.x = vel_magnitude; // [m/s]
-        
+    
         // velocity variances from a straight-line test at constant velocity
         float x_vel_covariance = 0.0021878/2; // [m^2/s^2]
 
         velocity_estimate.covariance[0] = x_vel_covariance;
-        // velocity_estimate.covariance[7] = y_vel_covariance;
+
+        ////////////////////////
+        // Heading Estimation //
+        ////////////////////////
+
+        float wheelbase = 2.3622;
+
+        float vehicle_heading;
+        vehicle_heading = previous_vehicle_heading + (vel_magnitude / wheelbase) * steering_value * 0.1;
+        
+        previous_vehicle_heading = vehicle_heading;
+
+        // position_estimate.pose.orientation.x
     }
 
     void WheelOdometryNode::timerCallback(const ros::TimerEvent& event)
