@@ -108,7 +108,6 @@ namespace wheel_odometry_node
         // nonzero to prevent divide by zero error
         float left_encoder_time = 0.02;
         float right_encoder_time = 0.02;
-        float steering_time = 0;
         
         // if the first cycle has been completed, can start calculating time difference
         if(first_time_cycle_complete)
@@ -118,11 +117,13 @@ namespace wheel_odometry_node
             
             if(steering_value_received)
             {
-                steering_time = steering_call_time - steering_prev_time;
+                steering_time = steering_call_time - steering_prev_call_time;
+                steering_value_received = false;
+                previous_steering_time = steering_time;
             }
             else
             {
-                steering_time = steering_prev_time;
+                steering_time = previous_steering_time;
             }
         }
 
@@ -158,9 +159,9 @@ namespace wheel_odometry_node
         float wheelbase = 2.3622;
 
         float vehicle_heading;
-        vehicle_heading = previous_vehicle_heading + (vel_magnitude / wheelbase) * steering_value * 0.1;
+        vehicle_heading = previous_vehicle_heading + (vel_magnitude / wheelbase) * steering_value * steering_time;
         
-        steering_prev_time = steering_call_time;
+        steering_prev_call_time = steering_call_time;
         previous_vehicle_heading = vehicle_heading;
 
         // stuff heading into pose msg

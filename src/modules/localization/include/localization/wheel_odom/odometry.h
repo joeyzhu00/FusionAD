@@ -113,8 +113,11 @@ class WheelOdometryNode
 
         float right_prev_encoder_time = 0;
         float left_prev_encoder_time = 0;
-        float steering_prev_time= 0; 
 
+        float steering_time= 0; 
+        float steering_prev_call_time = 0;
+        float previous_steering_time = 0;
+        
         bool calibration_completed = false;
 
         bool first_time_cycle_complete = false;
