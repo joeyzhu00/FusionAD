@@ -108,16 +108,16 @@ namespace wheel_odometry_node
         // nonzero to prevent divide by zero error
         float left_encoder_time = 0.02;
         float right_encoder_time = 0.02;
-        
+
         // if the first cycle has been completed, can start calculating time difference
         if(first_time_cycle_complete)
         {
-            left_encoder_time = left_encoder_call_time - left_prev_encoder_time;
-            right_encoder_time = right_encoder_call_time - right_prev_encoder_time;
+            left_encoder_time = (left_encoder_call_time - left_prev_encoder_time)/1000000;
+            right_encoder_time = (right_encoder_call_time - right_prev_encoder_time)/1000000;
             
             if(steering_value_received)
             {
-                steering_time = steering_call_time - steering_prev_call_time;
+                steering_time = (steering_call_time - steering_prev_call_time)/1000000;
                 steering_value_received = false;
                 previous_steering_time = steering_time;
             }
@@ -125,6 +125,7 @@ namespace wheel_odometry_node
             {
                 steering_time = previous_steering_time;
             }
+            ROS_INFO("Time Delta For Steering: %f", steering_time);
         }
 
         // convert encoder values to angular velocities
@@ -158,9 +159,26 @@ namespace wheel_odometry_node
 
         float wheelbase = 2.3622;
 
-        float vehicle_heading;
-        vehicle_heading = previous_vehicle_heading + (vel_magnitude / wheelbase) * steering_value * steering_time;
+        // float vehicle_heading;
+        // vehicle_heading = previous_vehicle_heading + (vel_magnitude / wheelbase) * steering_value * steering_time;
         
+        // compute the bicycle model
+        float beta;
+        beta = std::atan(0.5*std::tan(steering_value));
+        
+        float vehicle_heading;
+        vehicle_heading = ((vel_magnitude/(0.5 * wheelbase)) * std::sin(beta)) * steering_time + previous_vehicle_heading;
+        
+        // wrap the vehicle heading into 180 to -180 range
+        if(vehicle_heading > M_PI)
+        {
+            vehicle_heading = (-M_PI) + (vehicle_heading - M_PI);
+        }
+        else if(vehicle_heading < -M_PI)
+        {
+            vehicle_heading = M_PI + (vehicle_heading + M_PI);
+        }
+
         steering_prev_call_time = steering_call_time;
         previous_vehicle_heading = vehicle_heading;
 
@@ -174,6 +192,8 @@ namespace wheel_odometry_node
         position_estimate.pose.orientation.y = vehicle_quat[1];
         position_estimate.pose.orientation.z = vehicle_quat[2];
         position_estimate.pose.orientation.w = vehicle_quat[3];
+
+        first_time_cycle_complete = true;
     }
 
     void WheelOdometryNode::timerCallback(const ros::TimerEvent& event)
